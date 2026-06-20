@@ -1,0 +1,18 @@
+import os
+import sys
+
+# Keep generated Python cache files out of the project folders.
+sys.dont_write_bytecode = True
+
+import uvicorn
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    print("Starting Government Accident Detection & Alert System Backend...")
+    print(f"Open the website at: http://127.0.0.1:{port}")
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=port
+    )
