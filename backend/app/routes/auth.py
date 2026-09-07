@@ -3,13 +3,14 @@ from sqlalchemy.orm import Session
 import datetime
 
 from app.database import get_db
-from app.models import User
+from app.models import EmergencyContact, PublicFamilyAccess, User, Vehicle
 from app.schemas import (
     AdminPasswordReset,
     PasswordChange,
     UserCreate,
     UserLogin,
     UserOut,
+    PublicSignup,
     UserUpdate,
     Token,
 )
@@ -18,6 +19,10 @@ from app.auth import get_password_hash, verify_password, create_access_token, ge
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 VALID_ROLES = {"superadmin", "police", "hospital"}
+
+
+def normalize_phone(phone: str) -> str:
+    return "".join(character for character in phone if character.isdigit())
 
 
 @router.get("/users", response_model=list[UserOut])
@@ -215,6 +220,53 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user
     }
+
+
+@router.post("/public-signup", response_model=Token, status_code=status.HTTP_201_CREATED)
+def public_signup(payload: PublicSignup, db: Session = Depends(get_db)):
+    """Create a public account only when its phone matches a registered family contact."""
+    if db.query(User).filter(User.email == payload.email).first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered.")
+
+    vehicle = db.query(Vehicle).filter(Vehicle.plate_number == payload.plate_number.upper()).first()
+    if not vehicle:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No registered family vehicle matches that plate number.")
+
+    requested_phone = normalize_phone(payload.phone)
+    contact = next(
+        (item for item in db.query(EmergencyContact).filter(EmergencyContact.vehicle_id == vehicle.id).all()
+         if normalize_phone(item.phone) == requested_phone),
+        None,
+    )
+    if not contact:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Use the phone number registered as this vehicle's emergency family contact.",
+        )
+
+    user = User(
+        name=payload.name,
+        email=payload.email,
+        password_hash=get_password_hash(payload.password),
+        role="public",
+        phone=payload.phone,
+    )
+    db.add(user)
+    db.flush()
+    db.add(PublicFamilyAccess(
+        user_id=user.id,
+        vehicle_id=vehicle.id,
+        contact_name=contact.name,
+        relation=contact.relation,
+    ))
+    db.commit()
+    db.refresh(user)
+
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role},
+        expires_delta=datetime.timedelta(minutes=1440),
+    )
+    return {"access_token": access_token, "token_type": "bearer", "user": user}
 
 
 @router.get("/me", response_model=UserOut)

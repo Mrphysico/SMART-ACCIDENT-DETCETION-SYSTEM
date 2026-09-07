@@ -6,7 +6,7 @@ import math
 from app.database import get_db
 from app.models import Station
 from app.schemas import StationCreate, StationOut
-from app.auth import get_current_user
+from app.auth import require_responder
 
 router = APIRouter(prefix="/stations", tags=["stations"])
 
@@ -29,7 +29,7 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 
 @router.post("", response_model=StationOut, status_code=status.HTTP_201_CREATED)
-def create_station(station_in: StationCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def create_station(station_in: StationCreate, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Register a new Police Station or Hospital.
     Government authorized only.
@@ -50,7 +50,7 @@ def create_station(station_in: StationCreate, db: Session = Depends(get_db), cur
 
 
 @router.get("", response_model=List[StationOut])
-def get_all_stations(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_all_stations(db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Get all registered stations.
     """

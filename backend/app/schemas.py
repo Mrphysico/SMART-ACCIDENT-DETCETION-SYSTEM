@@ -43,6 +43,14 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+
+class PublicSignup(BaseModel):
+    name: str = Field(..., min_length=2)
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+    phone: str = Field(..., min_length=6)
+    plate_number: str = Field(..., min_length=3)
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -153,6 +161,18 @@ class AccidentOut(BaseModel):
     assigned_hospital: Optional[StationOut] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FamilyAccidentOut(BaseModel):
+    id: int
+    vehicle_plate: str
+    location_address: str
+    latitude: float
+    longitude: float
+    severity: str
+    police_status: str
+    hospital_status: str
+    timestamp: datetime
 
 class AccidentPoliceStatusUpdate(BaseModel):
     police_status: str = Field(..., description="pending, dispatched, resolved")

@@ -5,13 +5,13 @@ from typing import List
 from app.database import get_db
 from app.models import Alert, Accident
 from app.schemas import AlertOut, ManualAlertSend
-from app.auth import get_current_user
+from app.auth import require_responder
 from app.services.notification import send_sms, get_virtual_sms_logs, clear_virtual_sms_logs, get_virtual_push_logs, clear_virtual_push_logs
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 @router.post("/send", response_model=AlertOut, status_code=status.HTTP_201_CREATED)
-def send_manual_alert(payload: ManualAlertSend, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def send_manual_alert(payload: ManualAlertSend, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Manually dispatch an emergency SMS broadcast related to a specific accident.
     """
@@ -41,7 +41,7 @@ def send_manual_alert(payload: ManualAlertSend, db: Session = Depends(get_db), c
 
 
 @router.get("/virtual-gateway/sms-logs")
-def get_virtual_sms_gateway_logs(current_user = Depends(get_current_user)):
+def get_virtual_sms_gateway_logs(current_user = Depends(require_responder)):
     """
     Retreive all SMS transmissions captured by the virtual simulator.
     Used for live verification on the Super Admin control panel.
@@ -50,7 +50,7 @@ def get_virtual_sms_gateway_logs(current_user = Depends(get_current_user)):
 
 
 @router.delete("/virtual-gateway/sms-logs")
-def clear_virtual_sms_gateway_logs(current_user = Depends(get_current_user)):
+def clear_virtual_sms_gateway_logs(current_user = Depends(require_responder)):
     """
     Wipes the virtual SMS cache.
     """
@@ -59,7 +59,7 @@ def clear_virtual_sms_gateway_logs(current_user = Depends(get_current_user)):
 
 
 @router.get("/virtual-gateway/push-logs")
-def get_virtual_push_gateway_logs(current_user = Depends(get_current_user)):
+def get_virtual_push_gateway_logs(current_user = Depends(require_responder)):
     """
     Retrieve all simulated Push messages captured by the virtual gateway.
     """
@@ -67,7 +67,7 @@ def get_virtual_push_gateway_logs(current_user = Depends(get_current_user)):
 
 
 @router.delete("/virtual-gateway/push-logs")
-def clear_virtual_push_gateway_logs(current_user = Depends(get_current_user)):
+def clear_virtual_push_gateway_logs(current_user = Depends(require_responder)):
     """
     Wipes the virtual push notification logs.
     """
@@ -76,7 +76,7 @@ def clear_virtual_push_gateway_logs(current_user = Depends(get_current_user)):
 
 
 @router.get("/{accident_id}", response_model=List[AlertOut])
-def get_alerts_for_accident(accident_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_alerts_for_accident(accident_id: int, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Fetch all alerts generated (SMS, Push, Call) for a specific accident.
     """

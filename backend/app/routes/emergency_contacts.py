@@ -5,12 +5,12 @@ from typing import List
 from app.database import get_db
 from app.models import EmergencyContact, Vehicle
 from app.schemas import EmergencyContactCreate, EmergencyContactOut
-from app.auth import get_current_user
+from app.auth import require_responder
 
 router = APIRouter(prefix="/emergency-contacts", tags=["emergency-contacts"])
 
 @router.post("", response_model=EmergencyContactOut, status_code=status.HTTP_201_CREATED)
-def create_emergency_contact(contact_in: EmergencyContactCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def create_emergency_contact(contact_in: EmergencyContactCreate, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Link a new home/emergency contact to a vehicle.
     """
@@ -36,7 +36,7 @@ def create_emergency_contact(contact_in: EmergencyContactCreate, db: Session = D
 
 
 @router.get("/{vehicle_id}", response_model=List[EmergencyContactOut])
-def get_contacts_for_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_contacts_for_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Get all home emergency contacts linked to a specific vehicle.
     """
@@ -45,7 +45,7 @@ def get_contacts_for_vehicle(vehicle_id: int, db: Session = Depends(get_db), cur
 
 
 @router.delete("/{id}", status_code=status.HTTP_200_OK)
-def remove_emergency_contact(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def remove_emergency_contact(id: int, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Delete/unlink an emergency contact.
     """

@@ -52,7 +52,7 @@
 
     function cls(...parts) { return parts.filter(Boolean).join(" "); }
     function formatDate(value) { return value ? new Date(value).toLocaleString() : "N/A"; }
-    function roleLabel(role) { return ({ superadmin: "Super Admin", police: "Police Station", hospital: "Hospital" })[role] || role; }
+    function roleLabel(role) { return ({ superadmin: "Super Admin", police: "Police Station", hospital: "Hospital", public: "Family Account" })[role] || role; }
     function vehicleIcon(type) { return type === "bus" ? "B" : type === "truck" ? "T" : "C"; }
     function severityClass(sev) {
       return {
@@ -71,6 +71,7 @@
       const [token, setToken] = useState(localStorage.getItem("token") || "");
       const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
       const [login, setLogin] = useState({ email: "admin@gov.in", password: "admin123" });
+      const [publicSignup, setPublicSignup] = useState({ name: "", email: "", password: "", phone: "", plate_number: "" });
       const [page, setPage] = useState("dashboard");
       const [loading, setLoading] = useState(false);
       const [toast, setToast] = useState("");
@@ -102,6 +103,11 @@
       useEffect(() => { lucide.createIcons(); });
       useEffect(() => {
         if (!token) return;
+
+        if (user?.role === "public") {
+          fetchAll();
+          return;
+        }
 
         fetchAll();
         let socket;
@@ -155,6 +161,12 @@
       async function fetchAll() {
         setLoading(true);
         try {
+          if (user?.role === "public") {
+            const familyAccidents = await api("/accidents/family", { headers: authHeaders() });
+            setAccidents(familyAccidents);
+            setSelectedAccident(familyAccidents[0] || null);
+            return;
+          }
           const [vehicleData, stationData, accidentData, dailyData, monthlyData] = await Promise.all([
             api("/vehicles", { headers: authHeaders() }),
             api("/stations", { headers: authHeaders() }),
@@ -209,7 +221,30 @@
           localStorage.setItem("user", JSON.stringify(data.user));
           setToken(data.access_token);
           setUser(data.user);
+          setPage(data.user.role === "public" ? "family" : "dashboard");
           notify(`Secure session started for ${data.user.name}`);
+        } catch (err) {
+          notify(err.message);
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function handlePublicSignup(e) {
+        e.preventDefault();
+        setLoading(true);
+        try {
+          const data = await api("/auth/public-signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(publicSignup)
+          });
+          localStorage.setItem("token", data.access_token);
+          localStorage.setItem("user", JSON.stringify(data.user));
+          setToken(data.access_token);
+          setUser(data.user);
+          setPage("family");
+          notify("Your family status account is ready");
         } catch (err) {
           notify(err.message);
         } finally {
@@ -376,15 +411,16 @@
         return (!q || text.includes(q)) && (!filters.severity || a.severity === filters.severity) && (!filters.status || a.police_status === filters.status || a.hospital_status === filters.status);
       });
 
-      if (!token) return <Login login={login} setLogin={setLogin} handleLogin={handleLogin} loading={loading} toast={toast} />;
+      if (!token) return <Login login={login} setLogin={setLogin} publicSignup={publicSignup} setPublicSignup={setPublicSignup} handleLogin={handleLogin} handlePublicSignup={handlePublicSignup} loading={loading} toast={toast} />;
 
       return (
         <div className="min-h-screen bg-white">
           <Header user={user} page={page} setPage={setPage} logout={logout} />
           {toast && <div className="fixed right-4 top-4 z-[9999] max-w-md rounded border border-borderBlue bg-white px-4 py-3 text-sm font-bold text-primary shadow-lg">{toast}</div>}
           <main className="mx-auto max-w-[1500px] px-4 py-5">
-            {page === "dashboard" && <Dashboard vehicles={vehicles} stations={stations} accidents={accidents} activeAccidents={activeAccidents} daily={daily} selectedAccident={selectedAccident} setSelectedAccident={setSelectedAccident} triggerSimulation={triggerSimulation} updateStatus={updateStatus} />}
-            {page === "alerts" && <Alerts accidents={filteredAccidents} filters={filters} setFilters={setFilters} updateStatus={updateStatus} setSelectedAccident={setSelectedAccident} setPage={setPage} />}
+            {user?.role === "public" && <FamilyStatus user={user} accidents={accidents} fetchAll={fetchAll} loading={loading} />}
+            {user?.role !== "public" && page === "dashboard" && <Dashboard vehicles={vehicles} stations={stations} accidents={accidents} activeAccidents={activeAccidents} daily={daily} selectedAccident={selectedAccident} setSelectedAccident={setSelectedAccident} triggerSimulation={triggerSimulation} updateStatus={updateStatus} />}
+            {user?.role !== "public" && page === "alerts" && <Alerts accidents={filteredAccidents} filters={filters} setFilters={setFilters} updateStatus={updateStatus} setSelectedAccident={setSelectedAccident} setPage={setPage} />}
             {page === "tracker" && <Tracker vehicles={vehicles} stations={stations} accidents={accidents} selectedAccident={selectedAccident} />}
             {page === "history" && <History accidents={filteredAccidents} filters={filters} setFilters={setFilters} exportReport={exportReport} />}
             {page === "stations" && <Stations stations={stations} accidents={accidents} newStation={newStation} setNewStation={setNewStation} addStation={addStation} />}
@@ -398,48 +434,36 @@
       );
     }
 
-    function Login({ login, setLogin, handleLogin, loading, toast }) {
+    function Login({ login, setLogin, publicSignup, setPublicSignup, handleLogin, handlePublicSignup, loading, toast }) {
+      const [mode, setMode] = useState("family-login");
+      const familySignup = mode === "family-signup";
+      const staffLogin = mode === "staff-login";
       return (
         <div className="min-h-screen bg-primary text-white">
-          {toast && <div className="fixed right-4 top-4 z-50 rounded bg-white px-4 py-3 text-sm font-bold text-primary shadow-lg">{toast}</div>}
+          {toast && <div className="fixed right-4 top-4 z-50 max-w-md rounded border border-borderBlue bg-white px-4 py-3 text-sm font-bold text-primary shadow-lg">{toast}</div>}
           <div className="grid min-h-screen lg:grid-cols-[1fr_480px]">
             <section className="flex flex-col justify-between p-8">
-              <div className="flex items-center gap-3">
-                <div className="grid h-12 w-12 place-items-center rounded border border-blue-300 bg-white text-primary"><Icon name="shield-alert" className="h-7 w-7" /></div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[.22em] text-blue-200">Government Emergency Portal</p>
-                  <h1 className="text-2xl font-black">Government Accident Detection System</h1>
-                </div>
-              </div>
-              <div className="max-w-3xl py-12">
-                <p className="mb-4 inline-flex items-center gap-2 rounded border border-red-300 bg-danger px-3 py-1 text-xs font-black uppercase"><Icon name="siren" /> Official Use Only</p>
-                <h2 className="text-5xl font-black leading-tight">National road crash telemetry, dispatch, and SMS alert command.</h2>
-                <p className="mt-5 max-w-2xl text-lg font-medium text-blue-100">Restricted access for super admins, police stations, hospitals, and emergency services. No public registration is available.</p>
-              </div>
-              <p className="text-xs font-bold text-blue-200">Seeded login: admin@gov.in / admin123, police_delhi@gov.in / police123, hospital_delhi@gov.in / hospital123</p>
+              <div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded border border-blue-300 bg-white text-primary"><Icon name="shield-alert" className="h-7 w-7" /></div><div><p className="text-xs font-black uppercase tracking-[.22em] text-blue-200">Government Emergency Portal</p><h1 className="text-2xl font-black">Accident Family Status</h1></div></div>
+              <div className="max-w-3xl py-12"><p className="mb-4 inline-flex items-center gap-2 rounded border border-blue-300 bg-blue-800 px-3 py-1 text-xs font-black uppercase"><Icon name="heart-handshake" /> Family support access</p><h2 className="text-5xl font-black leading-tight">See your family vehicle's accident location and response status.</h2><p className="mt-5 max-w-2xl text-lg font-medium text-blue-100">Family accounts are linked to the emergency phone number already registered for the vehicle. They can view only their own family incident updates.</p></div>
+              <p className="text-xs font-bold text-blue-200">For an emergency, contact 112 immediately.</p>
             </section>
             <section className="flex items-center bg-white p-8 text-primary">
-              <form onSubmit={handleLogin} className="w-full rounded-lg border border-borderBlue bg-card p-6 shadow-xl">
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded bg-primary text-white"><Icon name="key-round" className="h-6 w-6" /></div>
-                  <div>
-                    <h2 className="text-xl font-black">Secure Login</h2>
-                    <p className="text-sm font-semibold text-slate-500">JWT authenticated government access</p>
-                  </div>
-                </div>
-                <label className="text-xs font-black uppercase">Login ID / Official Email</label>
-                <input className="mb-4 mt-1 w-full rounded border border-borderBlue px-3 py-3 text-slate-900" value={login.email} onChange={e => setLogin({ ...login, email: e.target.value })} />
-                <label className="text-xs font-black uppercase">Password</label>
-                <input type="password" className="mb-5 mt-1 w-full rounded border border-borderBlue px-3 py-3 text-slate-900" value={login.password} onChange={e => setLogin({ ...login, password: e.target.value })} />
-                <button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-3 font-black text-white hover:bg-primaryLight"><Icon name="log-in" /> {loading ? "Verifying..." : "Login To Command Center"}</button>
-              </form>
+              <div className="w-full rounded-lg border border-borderBlue bg-card p-6 shadow-xl">
+                <div className="mb-6 grid grid-cols-3 rounded border border-borderBlue bg-white p-1 text-xs font-black"><button onClick={() => setMode("family-login")} className={cls("rounded px-2 py-2", mode === "family-login" ? "bg-primary text-white" : "text-primary")}>Family Login</button><button onClick={() => setMode("family-signup")} className={cls("rounded px-2 py-2", familySignup ? "bg-primary text-white" : "text-primary")}>Sign Up</button><button onClick={() => setMode("staff-login")} className={cls("rounded px-2 py-2", staffLogin ? "bg-primary text-white" : "text-primary")}>Staff</button></div>
+                {familySignup ? <form onSubmit={handlePublicSignup} className="space-y-3"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded bg-primary text-white"><Icon name="user-plus" className="h-6 w-6" /></div><div><h2 className="text-xl font-black">Create Family Account</h2><p className="text-sm font-semibold text-slate-500">Match your registered emergency contact</p></div></div><Input label="Your Name" value={publicSignup.name} onChange={v => setPublicSignup({ ...publicSignup, name: v })} /><Input label="Email Address" type="email" value={publicSignup.email} onChange={v => setPublicSignup({ ...publicSignup, email: v })} /><Input label="Password" type="password" value={publicSignup.password} onChange={v => setPublicSignup({ ...publicSignup, password: v })} /><Input label="Registered Family Phone" type="tel" value={publicSignup.phone} onChange={v => setPublicSignup({ ...publicSignup, phone: v })} /><Input label="Family Vehicle Plate Number" value={publicSignup.plate_number} onChange={v => setPublicSignup({ ...publicSignup, plate_number: v.toUpperCase() })} /><button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-3 font-black text-white hover:bg-primaryLight"><Icon name="shield-check" /> {loading ? "Checking..." : "Create Family Account"}</button></form> : <form onSubmit={handleLogin} className="space-y-3"><div className="mb-3 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded bg-primary text-white"><Icon name={staffLogin ? "key-round" : "heart-handshake"} className="h-6 w-6" /></div><div><h2 className="text-xl font-black">{staffLogin ? "Staff Login" : "Family Login"}</h2><p className="text-sm font-semibold text-slate-500">{staffLogin ? "Government responder access" : "Your family incident status"}</p></div></div><Input label="Email Address" type="email" value={login.email} onChange={v => setLogin({ ...login, email: v })} /><Input label="Password" type="password" value={login.password} onChange={v => setLogin({ ...login, password: v })} /><button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-3 font-black text-white hover:bg-primaryLight"><Icon name="log-in" /> {loading ? "Verifying..." : "Sign In"}</button>{staffLogin && <p className="text-xs font-semibold text-slate-500">Official staff accounts use the same secure login.</p>}</form>}
+              </div>
             </section>
           </div>
         </div>
       );
     }
 
+    function FamilyStatus({ user, accidents, fetchAll, loading }) {
+      return <main className="mx-auto max-w-5xl px-4 py-8"><div className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase text-primaryLight">Family status portal</p><h2 className="text-3xl font-black text-primary">Hello, {user.name}</h2><p className="mt-1 text-slate-600">Only incidents linked to your registered family contact appear here.</p></div><button onClick={fetchAll} disabled={loading} className="flex items-center gap-2 rounded border border-primary px-4 py-2 text-sm font-black text-primary hover:bg-card"><Icon name="refresh-cw" /> Refresh status</button></div>{accidents.length ? <div className="space-y-4">{accidents.map(accident => <article key={accident.id} className="border border-borderBlue bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase text-slate-500">Family vehicle {accident.vehicle_plate}</p><h3 className="mt-1 text-xl font-black text-primary">Accident reported {formatDate(accident.timestamp)}</h3></div><span className={cls("rounded border px-3 py-1 text-xs font-black uppercase", severityClass(accident.severity))}>{accident.severity}</span></div><div className="mt-5 grid gap-4 md:grid-cols-2"><div className="border-l-4 border-danger bg-red-50 p-4"><p className="flex items-center gap-2 text-xs font-black uppercase text-danger"><Icon name="map-pin" /> Accident location</p><p className="mt-2 font-bold text-slate-800">{accident.location_address}</p><a className="mt-3 inline-flex items-center gap-2 text-sm font-black text-primary underline" target="_blank" rel="noreferrer" href={`https://www.google.com/maps?q=${accident.latitude},${accident.longitude}`}><Icon name="map" /> Open exact location</a></div><div className="grid grid-cols-2 gap-3"><div className="border border-borderBlue p-4"><p className="text-xs font-black uppercase text-slate-500">Police</p><p className="mt-2 font-black text-primary">{accident.police_status.replaceAll("_", " ")}</p></div><div className="border border-borderBlue p-4"><p className="text-xs font-black uppercase text-slate-500">Medical help</p><p className="mt-2 font-black text-primary">{accident.hospital_status.replaceAll("_", " ")}</p></div></div></div></article>)}</div> : <div className="border border-borderBlue bg-card p-8 text-center"><Icon name="circle-check-big" className="mx-auto h-10 w-10 text-success" /><h3 className="mt-3 text-xl font-black text-primary">No family accident updates</h3><p className="mt-1 text-slate-600">There are no incident reports for the vehicle linked to this account.</p></div>}</main>;
+    }
+
     function Header({ user, page, setPage, logout }) {
+      if (user?.role === "public") return <header className="border-b border-borderBlue bg-primary text-white"><div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded border border-blue-300 bg-white text-primary"><Icon name="heart-handshake" className="h-5 w-5" /></div><div><h1 className="text-base font-black">Accident Family Status</h1><p className="text-xs font-bold text-blue-200">Signed in as {user.name}</p></div></div><button onClick={logout} className="flex items-center gap-2 rounded border border-red-300 bg-danger px-3 py-2 text-xs font-black text-white"><Icon name="log-out" /> Logout</button></div></header>;
       const nav = [
         ["dashboard", "Dashboard", "layout-dashboard"],
         ["alerts", "Accident Alerts", "siren"],

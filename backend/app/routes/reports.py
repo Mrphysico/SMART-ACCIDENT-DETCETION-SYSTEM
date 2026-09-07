@@ -8,7 +8,7 @@ import logging
 
 from app.database import get_db
 from app.models import Accident, Vehicle, Station
-from app.auth import get_current_user
+from app.auth import require_responder
 
 # ReportLab imports for PDF generation
 from reportlab.lib.pagesizes import letter
@@ -21,7 +21,7 @@ logger = logging.getLogger("app.reports")
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 @router.get("/daily")
-def get_daily_reports(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_daily_reports(db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Generate aggregate statistics for the last 24 hours of operations.
     """
@@ -65,7 +65,7 @@ def get_daily_reports(db: Session = Depends(get_db), current_user = Depends(get_
 
 
 @router.get("/monthly")
-def get_monthly_reports(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_monthly_reports(db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Generate operational analytics for the last 30 days.
     Also breaks down crash records by time of day and regional hotspot stations.
@@ -138,7 +138,7 @@ def get_monthly_reports(db: Session = Depends(get_db), current_user = Depends(ge
 def export_reports(
     db: Session = Depends(get_db), 
     format: str = Query("csv", description="Format: csv or pdf"),
-    current_user = Depends(get_current_user)
+    current_user = Depends(require_responder)
 ):
     """
     Export all historical accident reports as CSV spreadsheets or beautiful official PDF reports.

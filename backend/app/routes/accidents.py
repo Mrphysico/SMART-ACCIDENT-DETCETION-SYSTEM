@@ -7,9 +7,9 @@ import asyncio
 import logging
 
 from app.database import get_db
-from app.models import Accident, Vehicle, EmergencyContact, Station, Alert, DispatchEvent
-from app.schemas import AccidentTrigger, AccidentOut, AccidentPoliceStatusUpdate, AccidentHospitalStatusUpdate
-from app.auth import get_current_user
+from app.models import Accident, Vehicle, EmergencyContact, PublicFamilyAccess, Station, Alert, DispatchEvent
+from app.schemas import AccidentTrigger, AccidentOut, AccidentPoliceStatusUpdate, AccidentHospitalStatusUpdate, FamilyAccidentOut
+from app.auth import get_current_user, require_responder
 from app.websocket import manager
 from app.services.notification import send_sms, send_push_notification
 from app.routes.stations import haversine_distance
@@ -308,6 +308,9 @@ def get_all_accidents(
     Get all accidents. Supports filtering by severity level and responder status.
     Government authorized only.
     """
+    if current_user.role == "public":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Use the family status endpoint for public accounts.")
+
     query = db.query(Accident)
     
     # Filter by user role jurisdiction
@@ -338,6 +341,35 @@ def get_all_accidents(
     return query.order_by(Accident.timestamp.desc()).all()
 
 
+@router.get("/family", response_model=List[FamilyAccidentOut])
+def get_family_accidents(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Return only incidents for vehicles linked to the signed-in family contact."""
+    if current_user.role != "public":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This endpoint is for public family accounts.")
+
+    return [
+        FamilyAccidentOut(
+            id=accident.id,
+            vehicle_plate=vehicle.plate_number,
+            location_address=accident.location_address,
+            latitude=accident.latitude,
+            longitude=accident.longitude,
+            severity=accident.severity,
+            police_status=accident.police_status,
+            hospital_status=accident.hospital_status,
+            timestamp=accident.timestamp,
+        )
+        for accident, vehicle in (
+            db.query(Accident, Vehicle)
+            .join(PublicFamilyAccess, PublicFamilyAccess.vehicle_id == Accident.vehicle_id)
+            .join(Vehicle, Vehicle.id == Accident.vehicle_id)
+            .filter(PublicFamilyAccess.user_id == current_user.id)
+            .order_by(Accident.timestamp.desc())
+            .all()
+        )
+    ]
+
+
 @router.get("/{id}", response_model=AccidentOut)
 def get_accident_by_id(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """
@@ -349,6 +381,8 @@ def get_accident_by_id(id: int, db: Session = Depends(get_db), current_user = De
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Accident report not found."
         )
+    if current_user.role == "public":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Use the family status endpoint for public accounts.")
     return accident
 
 
@@ -357,7 +391,7 @@ def update_police_status(
     id: int, 
     update: AccidentPoliceStatusUpdate, 
     db: Session = Depends(get_db), 
-    current_user = Depends(get_current_user)
+    current_user = Depends(require_responder)
 ):
     """
     Updates the police response dispatch status.
@@ -410,7 +444,7 @@ def update_hospital_status(
     id: int, 
     update: AccidentHospitalStatusUpdate, 
     db: Session = Depends(get_db), 
-    current_user = Depends(get_current_user)
+    current_user = Depends(require_responder)
 ):
     """
     Updates the medical/hospital response status.

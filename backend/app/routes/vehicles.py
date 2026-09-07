@@ -5,12 +5,12 @@ from typing import List
 from app.database import get_db
 from app.models import Vehicle, EmergencyContact
 from app.schemas import VehicleCreate, VehicleOut, VehicleLocationUpdate
-from app.auth import get_current_user
+from app.auth import require_responder
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 @router.post("", response_model=VehicleOut, status_code=status.HTTP_201_CREATED)
-def register_vehicle(vehicle_in: VehicleCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def register_vehicle(vehicle_in: VehicleCreate, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Onboard a new vehicle with owner details.
     Government authorized only.
@@ -40,7 +40,7 @@ def register_vehicle(vehicle_in: VehicleCreate, db: Session = Depends(get_db), c
 
 
 @router.get("", response_model=List[VehicleOut])
-def get_all_vehicles(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_all_vehicles(db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Fetch all registered vehicles.
     Government authorized only.
@@ -49,7 +49,7 @@ def get_all_vehicles(db: Session = Depends(get_db), current_user = Depends(get_c
 
 
 @router.get("/live")
-def get_live_locations(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_live_locations(db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Fetch live locations of all vehicles. Used by operations maps.
     """
@@ -93,7 +93,7 @@ def update_vehicle_location(id: int, update: VehicleLocationUpdate, db: Session 
 
 
 @router.get("/{id}")
-def get_vehicle_details(id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_vehicle_details(id: int, db: Session = Depends(get_db), current_user = Depends(require_responder)):
     """
     Fetch full details of a vehicle and its emergency/home contacts.
     """

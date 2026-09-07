@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_superadmin
+from app.auth import require_responder, require_superadmin
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -108,7 +108,7 @@ def system_health(db: Session = Depends(get_db)):
 
 
 @router.get("/operations/overview")
-def operations_overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def operations_overview(db: Session = Depends(get_db), current_user: User = Depends(require_responder)):
     now = datetime.datetime.utcnow()
     online_since = now - datetime.timedelta(minutes=2)
     active = db.query(Accident).filter(
@@ -144,7 +144,7 @@ def operations_overview(db: Session = Depends(get_db), current_user: User = Depe
 
 
 @router.get("/operations/devices")
-def list_devices(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_devices(db: Session = Depends(get_db), current_user: User = Depends(require_responder)):
     return [serialize_device(d) for d in db.query(VehicleDevice).order_by(VehicleDevice.id.desc()).all()]
 
 
@@ -214,7 +214,7 @@ def device_accident(
 
 
 @router.get("/operations/profiles")
-def list_profiles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_profiles(db: Session = Depends(get_db), current_user: User = Depends(require_responder)):
     return db.query(EmergencyProfile).order_by(EmergencyProfile.id.desc()).all()
 
 
@@ -236,12 +236,12 @@ def upsert_profile(payload: ProfileUpsert, db: Session = Depends(get_db), curren
 
 
 @router.get("/operations/dispatches")
-def list_dispatches(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_dispatches(db: Session = Depends(get_db), current_user: User = Depends(require_responder)):
     return db.query(DispatchEvent).order_by(DispatchEvent.created_at.desc()).limit(200).all()
 
 
 @router.patch("/operations/dispatches/{dispatch_id}")
-def update_dispatch(dispatch_id: int, payload: DispatchUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_dispatch(dispatch_id: int, payload: DispatchUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_responder)):
     dispatch = db.query(DispatchEvent).filter(DispatchEvent.id == dispatch_id).first()
     if not dispatch:
         raise HTTPException(404, "Dispatch not found")

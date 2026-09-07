@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, Float, DateTime, ForeignKey, JSON
+from sqlalchemy import Boolean, Column, Integer, String, Float, DateTime, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 import datetime
 
@@ -11,7 +11,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # 'superadmin', 'police', 'hospital'
+    role = Column(String, nullable=False)  # 'superadmin', 'police', 'hospital', 'public'
     station_name = Column(String, nullable=True)
     station_address = Column(String, nullable=True)
     jurisdiction_area = Column(String, nullable=True)
@@ -50,6 +50,18 @@ class EmergencyContact(Base):
 
     # Relationships
     vehicle = relationship("Vehicle", back_populates="emergency_contacts")
+
+
+class PublicFamilyAccess(Base):
+    __tablename__ = "public_family_access"
+    __table_args__ = (UniqueConstraint("user_id", "vehicle_id", name="uq_public_family_access"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False)
+    contact_name = Column(String, nullable=False)
+    relation = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class Accident(Base):
